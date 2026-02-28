@@ -19,31 +19,29 @@ public class FileEncryptor {
     private static final int IV_LENGTH = 16;
     
     public static File encrypt(File inputFile, String password) throws Exception {
-        // 生成随机盐和IV
         byte[] salt = new byte[SALT_LENGTH];
         byte[] iv = new byte[IV_LENGTH];
         new SecureRandom().nextBytes(salt);
         new SecureRandom().nextBytes(iv);
         
-        // 从密码生成密钥
         SecretKey key = generateKey(password, salt);
         
-        // 创建输出文件
         String outputPath = inputFile.getAbsolutePath() + ".aes";
         File outputFile = new File(outputPath);
+        int counter = 1;
+        while (outputFile.exists()) {
+            outputFile = new File(inputFile.getAbsolutePath() + "_" + counter++ + ".aes");
+        }
         
         try (FileInputStream fis = new FileInputStream(inputFile);
              FileOutputStream fos = new FileOutputStream(outputFile)) {
             
-            // 写入盐和IV
             fos.write(salt);
             fos.write(iv);
             
-            // 初始化加密器
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
             
-            // 加密文件内容
             byte[] buffer = new byte[8192];
             int bytesRead;
             while ((bytesRead = fis.read(buffer)) != -1) {
@@ -68,16 +66,13 @@ public class FileEncryptor {
         }
         
         try (FileInputStream fis = new FileInputStream(inputFile)) {
-            // 读取盐和IV
             byte[] salt = new byte[SALT_LENGTH];
             byte[] iv = new byte[IV_LENGTH];
             fis.read(salt);
             fis.read(iv);
             
-            // 从密码生成密钥
             SecretKey key = generateKey(password, salt);
             
-            // 创建输出文件
             String outputPath = inputFile.getAbsolutePath()
                 .substring(0, inputFile.getAbsolutePath().length() - 4);
             String basePath = outputPath;
@@ -87,7 +82,6 @@ public class FileEncryptor {
             }
             File outputFile = new File(outputPath);
             
-            // 初始化解密器
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
             
