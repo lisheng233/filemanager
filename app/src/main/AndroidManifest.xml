@@ -3,10 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.filemanager">
 
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="28" />
-	<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- 注意: MANAGE_EXTERNAL_STORAGE 权限在 API 28 上不可用，需要条件判断 -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="29" 
+        tools:ignore="ScopedStorage" />
 
     <application
         android:allowBackup="true"
@@ -15,7 +17,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.FileManager"
-        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         tools:targetApi="28">
         
