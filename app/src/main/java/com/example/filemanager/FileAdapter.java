@@ -16,7 +16,6 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.FileViewHolder
     
     private File[] files;
     private OnFileClickListener listener;
-    private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
     
     public interface OnFileClickListener {
         void onFileClick(File file);
@@ -51,6 +50,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.FileViewHolder
         TextView tvName;
         TextView tvSize;
         TextView tvDate;
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
         
         FileViewHolder(View itemView) {
             super(itemView);
@@ -71,7 +71,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.FileViewHolder
                 tvSize.setText(formatFileSize(file.length()));
             }
             
-            tvDate.setText(formatDate(file.lastModified()));
+            tvDate.setText(dateFormat.format(new Date(file.lastModified())));
             
             itemView.setOnClickListener(v -> listener.onFileClick(file));
         }
@@ -86,11 +86,6 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.FileViewHolder
             } else {
                 return String.format("%.2f GB", size / (1024.0 * 1024.0 * 1024.0));
             }
-        }
-        
-        private String formatDate(long timestamp) {
-            return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-                .format(new Date(timestamp));
         }
     }
 }
