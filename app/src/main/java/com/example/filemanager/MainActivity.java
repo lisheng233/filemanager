@@ -3,20 +3,18 @@ package com.example.filemanager;
 import android.Manifest;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.View;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.anggrayudi.storage.SimpleStorageHelper;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 import com.karumi.dexter.Dexter;
 import com.karumi.dexter.MultiplePermissionsReport;
 import com.karumi.dexter.PermissionToken;
@@ -27,17 +25,19 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     
+    private static final int FILE_PICK_REQUEST_CODE = 100;
+    
     private RecyclerView recyclerView;
     private FileAdapter fileAdapter;
     private File currentDirectory;
-    private SimpleStorageHelper storageHelper;
+    private String currentPassword;
+    private String currentOperation;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
-        storageHelper = new SimpleStorageHelper(this);
         initViews();
         checkPermissions();
     }
@@ -52,10 +52,16 @@ public class MainActivity extends AppCompatActivity {
         MaterialButton btnUnzip = findViewById(R.id.btnUnzip);
         MaterialButton btnRefresh = findViewById(R.id.btnRefresh);
         
-        btnEncrypt.setOnClickListener(v -> showEncryptDialog());
-        btnDecrypt.setOnClickListener(v -> showDecryptDialog());
-        btnZip.setOnClickListener(v -> showZipDialog());
-        btnUnzip.setOnClickListener(v -> showUnzipDialog());
+        btnEncrypt.setOnClickListener(v -> showPasswordDialog("encrypt"));
+        btnDecrypt.setOnClickListener(v -> showPasswordDialog("decrypt"));
+        btnZip.setOnClickListener(v -> {
+            currentOperation = "zip";
+            pickFile();
+        });
+        btnUnzip.setOnClickListener(v -> {
+            currentOperation = "unzip";
+            pickFile("*/*");
+        });
         btnRefresh.setOnClickListener(v -> loadFiles(currentDirectory));
     }
     
@@ -69,8 +75,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onPermissionsChecked(MultiplePermissionsReport report) {
                     if (report.areAllPermissionsGranted()) {
-                        currentDirectory = Environment.getExternalStorageDirectory();
-                        loadFiles(currentDirectory);
+                        initFileSystem();
                     } else {
                         Toast.makeText(MainActivity.this, "需要存储权限", Toast.LENGTH_SHORT).show();
                         finish();
@@ -84,8 +89,13 @@ public class MainActivity extends AppCompatActivity {
             }).check();
     }
     
+    private void initFileSystem() {
+        currentDirectory = Environment.getExternalStorageDirectory();
+        loadFiles(currentDirectory);
+    }
+    
     private void loadFiles(File directory) {
-        if (directory != null && directory.exists()) {
+        if (directory != null && directory.exists() && directory.canRead()) {
             File[] files = directory.listFiles();
             if (files != null) {
                 fileAdapter = new FileAdapter(files, new FileAdapter.OnFileClickListener() {
@@ -108,19 +118,16 @@ public class MainActivity extends AppCompatActivity {
         String fileName = file.getName().toLowerCase();
         if (fileName.endsWith(".txt") || fileName.endsWith(".json") || 
             fileName.endsWith(".md") || fileName.endsWith(".log")) {
-            // 打开文本文件
             Intent intent = new Intent(this, TextViewerActivity.class);
             intent.putExtra("file_path", file.getAbsolutePath());
             startActivity(intent);
         } else {
-            // 尝试用其他应用打开
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            Uri uri = FileProvider.getUriForFile(this, 
-                getPackageName() + ".fileprovider", file);
-            intent.setDataAndType(uri, getMimeType(fileName));
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            
             try {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                Uri uri = FileProvider.getUriForFile(this, 
+                    getPackageName() + ".fileprovider", file);
+                intent.setDataAndType(uri, getMimeType(fileName));
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(intent);
             } catch (Exception e) {
                 Toast.makeText(this, "无法打开文件", Toast.LENGTH_SHORT).show();
@@ -133,120 +140,100 @@ public class MainActivity extends AppCompatActivity {
         if (fileName.endsWith(".json")) return "application/json";
         if (fileName.endsWith(".md")) return "text/markdown";
         if (fileName.endsWith(".log")) return "text/plain";
+        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "image/jpeg";
+        if (fileName.endsWith(".png")) return "image/png";
+        if (fileName.endsWith(".pdf")) return "application/pdf";
         return "*/*";
     }
     
-    private void showEncryptDialog() {
+    private void showPasswordDialog(String operation) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(operation.equals("encrypt") ? "加密文件" : "解密文件");
+        
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_password, null);
         TextInputEditText etPassword = dialogView.findViewById(R.id.etPassword);
+        builder.setView(dialogView);
         
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("加密文件")
-            .setView(dialogView)
-            .setPositiveButton("加密", (dialog, which) -> {
-                String password = etPassword.getText().toString();
-                if (!password.isEmpty()) {
-                    selectFileForEncryption(password);
-                }
-            })
-            .setNegativeButton("取消", null)
-            .show();
-    }
-    
-    private void showDecryptDialog() {
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_password, null);
-        TextInputEditText etPassword = dialogView.findViewById(R.id.etPassword);
+        builder.setPositiveButton("确定", (dialog, which) -> {
+            String password = etPassword.getText().toString();
+            if (!password.isEmpty()) {
+                currentPassword = password;
+                currentOperation = operation;
+                pickFile(operation.equals("decrypt") ? "application/octet-stream" : "*/*");
+            } else {
+                Toast.makeText(this, "请输入密码", Toast.LENGTH_SHORT).show();
+            }
+        });
         
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("解密文件")
-            .setView(dialogView)
-            .setPositiveButton("解密", (dialog, which) -> {
-                String password = etPassword.getText().toString();
-                if (!password.isEmpty()) {
-                    selectFileForDecryption(password);
-                }
-            })
-            .setNegativeButton("取消", null)
-            .show();
+        builder.setNegativeButton("取消", null);
+        builder.show();
     }
     
-    private void showZipDialog() {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("压缩文件")
-            .setMessage("选择要压缩的文件或文件夹")
-            .setPositiveButton("选择", (dialog, which) -> selectFileForZip())
-            .setNegativeButton("取消", null)
-            .show();
+    private void pickFile() {
+        pickFile("*/*");
     }
     
-    private void showUnzipDialog() {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("解压文件")
-            .setMessage("选择要解压的ZIP文件")
-            .setPositiveButton("选择", (dialog, which) -> selectFileForUnzip())
-            .setNegativeButton("取消", null)
-            .show();
-    }
-    
-    private void selectFileForEncryption(String password) {
-        storageHelper.openFilePicker(100, file -> {
-            try {
-                File encryptedFile = FileEncryptor.encrypt(file, password);
-                Toast.makeText(this, "加密成功: " + encryptedFile.getName(), Toast.LENGTH_SHORT).show();
-                loadFiles(currentDirectory);
-            } catch (Exception e) {
-                Toast.makeText(this, "加密失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-    
-    private void selectFileForDecryption(String password) {
-        storageHelper.openFilePicker(101, file -> {
-            if (file.getName().endsWith(".aes")) {
-                try {
-                    File decryptedFile = FileEncryptor.decrypt(file, password);
-                    Toast.makeText(this, "解密成功: " + decryptedFile.getName(), Toast.LENGTH_SHORT).show();
-                    loadFiles(currentDirectory);
-                } catch (Exception e) {
-                    Toast.makeText(this, "解密失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                Toast.makeText(this, "请选择.aes文件", Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-    
-    private void selectFileForZip() {
-        storageHelper.openFilePicker(102, file -> {
-            try {
-                File zipFile = ZipHelper.zip(file);
-                Toast.makeText(this, "压缩成功: " + zipFile.getName(), Toast.LENGTH_SHORT).show();
-                loadFiles(currentDirectory);
-            } catch (Exception e) {
-                Toast.makeText(this, "压缩失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-    
-    private void selectFileForUnzip() {
-        storageHelper.openFilePicker(103, file -> {
-            if (file.getName().endsWith(".zip")) {
-                try {
-                    File outputDir = ZipHelper.unzip(file, currentDirectory);
-                    Toast.makeText(this, "解压成功到: " + outputDir.getName(), Toast.LENGTH_SHORT).show();
-                    loadFiles(currentDirectory);
-                } catch (Exception e) {
-                    Toast.makeText(this, "解压失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                Toast.makeText(this, "请选择.zip文件", Toast.LENGTH_SHORT).show();
-            }
-        });
+    private void pickFile(String mimeType) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType(mimeType);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, FILE_PICK_REQUEST_CODE);
     }
     
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        storageHelper.getDiskManager().onActivityResult(requestCode, resultCode, data);
+        
+        if (requestCode == FILE_PICK_REQUEST_CODE && resultCode == RESULT_OK) {
+            if (data != null && data.getData() != null) {
+                Uri uri = data.getData();
+                
+                Toast.makeText(this, "正在处理: " + uri.getLastPathSegment(), Toast.LENGTH_SHORT).show();
+                
+                try {
+                    File file = FilePickerHelper.getFileFromUri(this, uri);
+                    
+                    if (currentOperation.equals("encrypt") || currentOperation.equals("decrypt")) {
+                        if (currentPassword == null || currentPassword.isEmpty()) {
+                            Toast.makeText(this, "请先输入密码", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                    }
+                    
+                    if (currentOperation.equals("encrypt")) {
+                        File encryptedFile = FileEncryptor.encrypt(file, currentPassword);
+                        Toast.makeText(this, "加密成功: " + encryptedFile.getName(), Toast.LENGTH_SHORT).show();
+                    } else if (currentOperation.equals("decrypt")) {
+                        if (file.getName().endsWith(".aes")) {
+                            File decryptedFile = FileEncryptor.decrypt(file, currentPassword);
+                            Toast.makeText(this, "解密成功: " + decryptedFile.getName(), Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "请选择.aes文件", Toast.LENGTH_SHORT).show();
+                        }
+                    } else if (currentOperation.equals("zip")) {
+                        File zipFile = ZipHelper.zip(file);
+                        Toast.makeText(this, "压缩成功: " + zipFile.getName(), Toast.LENGTH_SHORT).show();
+                    } else if (currentOperation.equals("unzip")) {
+                        if (file.getName().endsWith(".zip")) {
+                            File outputDir = ZipHelper.unzip(file, currentDirectory);
+                            Toast.makeText(this, "解压成功到: " + outputDir.getName(), Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "请选择ZIP文件", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    
+                    // 删除临时文件
+                    if (file != null && file.exists()) {
+                        file.delete();
+                    }
+                    
+                    loadFiles(currentDirectory);
+                    
+                } catch (Exception e) {
+                    Toast.makeText(this, "操作失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 }
