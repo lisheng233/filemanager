@@ -10,6 +10,10 @@ public class ZipHelper {
     public static File zip(File source) throws IOException {
         String zipPath = source.getAbsolutePath() + ".zip";
         File zipFile = new File(zipPath);
+        int counter = 1;
+        while (zipFile.exists()) {
+            zipFile = new File(source.getAbsolutePath() + "_" + counter++ + ".zip");
+        }
         
         try (FileOutputStream fos = new FileOutputStream(zipFile);
              ZipOutputStream zos = new ZipOutputStream(fos)) {
@@ -26,11 +30,14 @@ public class ZipHelper {
     
     private static void zipDirectory(File folder, String parentFolder, 
                                      ZipOutputStream zos) throws IOException {
-        for (File file : folder.listFiles()) {
-            if (file.isDirectory()) {
-                zipDirectory(file, parentFolder + "/" + file.getName(), zos);
-            } else {
-                zipFile(file, parentFolder + "/" + file.getName(), zos);
+        File[] files = folder.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    zipDirectory(file, parentFolder + "/" + file.getName(), zos);
+                } else {
+                    zipFile(file, parentFolder + "/" + file.getName(), zos);
+                }
             }
         }
     }
@@ -58,6 +65,10 @@ public class ZipHelper {
         
         String outputDirName = zipFile.getName().replace(".zip", "");
         File outputDir = new File(destinationDir, outputDirName);
+        int counter = 1;
+        while (outputDir.exists()) {
+            outputDir = new File(destinationDir, outputDirName + "_" + counter++);
+        }
         outputDir.mkdirs();
         
         byte[] buffer = new byte[8192];
@@ -71,7 +82,6 @@ public class ZipHelper {
                 if (zipEntry.isDirectory()) {
                     newFile.mkdirs();
                 } else {
-                    // 创建父目录
                     new File(newFile.getParent()).mkdirs();
                     
                     try (FileOutputStream fos = new FileOutputStream(newFile)) {
