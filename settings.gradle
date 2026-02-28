@@ -1,0 +1,12 @@
+// settings.gradle 备选方案
+rootProject.name = "file"
+include ':app'
+
+// 旧版本不支持 pluginManagement，所以注释掉
+// pluginManagement {
+//     repositories {
+//         gradlePluginPortal()
+//         google()
+//         mavenCentral()
+//     }
+// }
